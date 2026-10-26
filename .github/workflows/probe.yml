@@ -1,0 +1,56 @@
+name: Probe dependencies
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Modrinth versions for 1.21.11 (fabric)
+        run: |
+          for p in accessories sodium-dynamic-lights txnilib iris sodium modmenu forge-config-api-port lambdynamiclights fabric-api cloth-config; do
+            echo "=== $p ==="
+            curl -sS -A "probe/1.0 (github actions)" -G "https://api.modrinth.com/v2/project/$p/version" \
+              --data-urlencode 'game_versions=["1.21.11"]' \
+              --data-urlencode 'loaders=["fabric"]' \
+              | python3 -c 'import sys,json
+try:
+    d=json.load(sys.stdin)
+    if not d: print("  NONE for 1.21.11/fabric")
+    for v in d[:5]: print("  ", v["version_number"], v["game_versions"], v["date_published"][:10])
+except Exception as e: print("  error", e)'
+          done
+      - name: Modrinth latest versions regardless of MC version
+        run: |
+          for p in accessories sodium-dynamic-lights txnilib; do
+            echo "=== $p (latest fabric) ==="
+            curl -sS -A "probe/1.0 (github actions)" -G "https://api.modrinth.com/v2/project/$p/version" \
+              --data-urlencode 'loaders=["fabric"]' \
+              | python3 -c 'import sys,json
+d=json.load(sys.stdin)
+for v in d[:6]: print("  ", v["version_number"], v["game_versions"], v["date_published"][:10])'
+          done
+      - name: Maven metadata
+        run: |
+          show() { echo "=== $1 ==="; curl -sS -m 30 "$1" | grep -E "<(latest|release|version)>" | tail -${2:-8}; }
+          show https://maven.wispforest.io/releases/io/wispforest/accessories-fabric/maven-metadata.xml 12
+          show https://maven.txni.dev/releases/toni/txnilib/fabric-1.21.11/maven-metadata.xml 6
+          show https://maven.txni.dev/releases/toni/txnilib/fabric-1.21.1/maven-metadata.xml 4
+          show https://maven.txni.dev/releases/toni/sodiumdynamiclights/fabric-1.21.11/maven-metadata.xml 6
+          show https://maven.txni.dev/releases/toni/sodiumdynamiclights/fabric-1.21.1/maven-metadata.xml 4
+          echo "=== fabric-api 1.21.11 ==="
+          curl -sS -m 30 https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-api/maven-metadata.xml | grep -E "1\.21\.11" | tail -3
+          echo "=== loom plugin markers ==="
+          show https://maven.fabricmc.net/net/fabricmc/fabric-loom-remap/net.fabricmc.fabric-loom-remap.gradle.plugin/maven-metadata.xml 5
+          show https://maven.fabricmc.net/net/fabricmc/fabric-loom/net.fabricmc.fabric-loom.gradle.plugin/maven-metadata.xml 5
+          show https://maven.fabricmc.net/fabric-loom/fabric-loom.gradle.plugin/maven-metadata.xml 5
+          echo "=== yarn/loader for 1.21.11 ==="
+          curl -sS -m 30 "https://meta.fabricmc.net/v2/versions/loader/1.21.11" | python3 -c 'import sys,json
+d=json.load(sys.stdin); print([x["loader"]["version"] for x in d[:3]])'
+      - name: Tool versions available on runner
+        run: |
+          java -version 2>&1 | head -2
+          curl -sS https://services.gradle.org/versions/current | head -c 400
